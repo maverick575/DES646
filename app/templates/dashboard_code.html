@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Review Analytics Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container-main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header-subtitle {
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .product-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .product-title {
+            color: #667eea;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+        }
+        
+        table {
+            font-size: 0.9rem;
+        }
+        
+        table thead th {
+            background: #667eea;
+            color: white;
+            border: none;
+        }
+        
+        table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .table-container {
+            margin-top: 30px;
+            overflow-x: auto;
+        }
+        
+        .btn-primary-custom {
+            background: #667eea;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .btn-primary-custom:hover {
+            background: #764ba2;
+        }
+        
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <!-- Header -->
+        <div class="header">
+            <h1>🛍️ Amazon Review Analytics Dashboard</h1>
+            <p class="header-subtitle">Real-time analysis of product reviews with NLP insights</p>
+        </div>
+        
+        <!-- Dashboard Content -->
+        {% if dashboard_data %}
+            {% for data in dashboard_data %}
+                <div class="product-section">
+                    {% if data.status == 'success' %}
+                        <!-- Product Title & URL -->
+                        <div class="product-title">
+                            📊 Product Analysis
+                        </div>
+                        <p><small>URL: <code>{{ data.url }}</code></small></p>
+                        
+                        <!-- CSV Data will be loaded here -->
+                        <div id="content-{{ loop.index }}"></div>
+                        
+                        <script>
+                            // Parse CSV data for this product
+                            (function() {
+                                const csvContent = `{{ data.csv_data|safe }}`;
+                                const lines = csvContent.trim().split('\n');
+                                
+                                // Parse header
+                                const headers = lines[0].split(',').map(h => h.trim());
+                                
+                                // Parse rows
+                                const rows = [];
+                                for (let i = 1; i < Math.min(lines.length, 101); i++) {
+                                    const values = lines[i].split(',');
+                                    const row = {};
+                                    headers.forEach((h, idx) => {
+                                        row[h] = values[idx] ? values[idx].trim() : '';
+                                    });
+                                    rows.push(row);
+                                }
+                                
+                                // Calculate statistics
+                                const totalReviews = rows.length;
+                                const avgRating = (rows.reduce((sum, r) => sum + parseFloat(r.rating || 0), 0) / totalReviews).toFixed(2);
+                                
+                                const sentiments = {};
+                                rows.forEach(r => {
+                                    const sentiment = r.sentiment_label || 'Unknown';
+                                    sentiments[sentiment] = (sentiments[sentiment] || 0) + 1;
+                                });
+                                
+                                const positiveCount = sentiments['Positive'] || 0;
+                                const positivePercent = ((positiveCount / totalReviews) * 100).toFixed(1);
+                                
+                                // Build HTML
+                                let html = '<div class="stats-grid">';
+                                html += `<div class="stat-card">
+                                    <div class="stat-value">${totalReviews}</div>
+                                    <div class="stat-label">Total Reviews</div>
+                                </div>`;
+                                html += `<div class="stat-card">
+                                    <div class="stat-value">${avgRating}★</div>
+                                    <div class="stat-label">Avg Rating</div>
+                                </div>`;
+                                html += `<div class="stat-card">
+                                    <div class="stat-value">${positivePercent}%</div>
+                                    <div class="stat-label">Positive</div>
+                                </div>`;
+                                html += '</div>';
+                                
+                                // Sentiment chart
+                                html += `<div class="chart-container">
+                                    <canvas id="sentimentChart-{{ loop.index }}"></canvas>
+                                </div>`;
+                                
+                                // Rating distribution chart
+                                html += `<div class="chart-container">
+                                    <canvas id="ratingChart-{{ loop.index }}"></canvas>
+                                </div>`;
+                                
+                                // Data table
+                                html += '<div class="table-container">';
+                                html += '<h5>Review Data (First 100 rows)</h5>';
+                                html += '<table class="table table-striped table-sm">';
+                                html += '<thead><tr>';
+                                headers.forEach(h => html += `<th>${h}</th>`);
+                                html += '</tr></thead><tbody>';
+                                
+                                rows.forEach(row => {
+                                    html += '<tr>';
+                                    headers.forEach(h => html += `<td>${row[h] || ''}</td>`);
+                                    html += '</tr>';
+                                });
+                                
+                                html += '</tbody></table></div>';
+                                
+                                // Insert HTML
+                                document.getElementById('content-{{ loop.index }}').innerHTML = html;
+                                
+                                // Create charts after DOM is ready
+                                setTimeout(() => {
+                                    // Sentiment pie chart
+                                    const sentimentLabels = Object.keys(sentiments);
+                                    const sentimentValues = Object.values(sentiments);
+                                    
+                                    const sentimentCtx = document.getElementById('sentimentChart-{{ loop.index }}');
+                                    if (sentimentCtx) {
+                                        new Chart(sentimentCtx, {
+                                            type: 'doughnut',
+                                            data: {
+                                                labels: sentimentLabels,
+                                                datasets: [{
+                                                    data: sentimentValues,
+                                                    backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                                                }]
+                                            },
+                                            options: {
+                                                responsive: true,
+                                                maintainAspectRatio: false,
+                                                plugins: {
+                                                    title: { display: true, text: 'Sentiment Distribution' }
+                                                }
+                                            }
+                                        });
+                                    }
+                                    
+                                    // Rating distribution bar chart
+                                    const ratingCounts = {1:0, 2:0, 3:0, 4:0, 5:0};
+                                    rows.forEach(r => {
+                                        const rating = parseInt(r.rating) || 0;
+                                        if (ratingCounts.hasOwnProperty(rating)) {
+                                            ratingCounts[rating]++;
+                                        }
+                                    });
+                                    
+                                    const ratingCtx = document.getElementById('ratingChart-{{ loop.index }}');
+                                    if (ratingCtx) {
+                                        new Chart(ratingCtx, {
+                                            type: 'bar',
+                                            data: {
+                                                labels: ['1★', '2★', '3★', '4★', '5★'],
+                                                datasets: [{
+                                                    label: 'Review Count',
+                                                    data: [ratingCounts[1], ratingCounts[2], ratingCounts[3], ratingCounts[4], ratingCounts[5]],
+                                                    backgroundColor: '#667eea'
+                                                }]
+                                            },
+                                            options: {
+                                                responsive: true,
+                                                maintainAspectRatio: false,
+                                                plugins: {
+                                                    title: { display: true, text: 'Rating Distribution' }
+                                                }
+                                            }
+                                        });
+                                    }
+                                }, 100);
+                            })();
+                        </script>
+                    {% else %}
+                        <div class="error-message">
+                            ❌ Failed to process URL: {{ data.url }}
+                            <br>
+                            Error: {{ data.error }}
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="product-section">
+                <div class="loading">
+                    <p>⏳ No data available</p>
+                </div>
+            </div>
+        {% endif %}
+        
+        <!-- Navigation Buttons -->
+        <div class="product-section">
+            <div class="button-group">
+                <a href="/" class="btn btn-primary-custom">← Analyze Another Product</a>
+                <button onclick="cleanupSession()" class="btn btn-primary-custom">🗑️ Clear Session</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function cleanupSession() {
+            if (confirm('Are you sure you want to delete this session and go back?')) {
+                fetch('/cleanup', { method: 'POST' })
+                    .then(() => window.location.href = '/');
+            }
+        }
+    </script>
+</body>
+</html>
